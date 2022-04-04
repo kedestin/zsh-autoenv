@@ -401,6 +401,7 @@ function autounstash() {
     get_autostash_array_name
     if (( ${#${(P)ret}} > 0 )); then
         local run_from_autounstash=1
+        local autounstash_var
         for autounstash_var in ${(P)ret}; do
             unstash $autounstash_var
         done
