@@ -222,6 +222,102 @@ function autostash() {
     done
 }
 
+function autosource () {
+    if [[ -z $1 ]]; then
+        return
+    fi
+
+    if [[ "${(t)__varstash_autosource_ignore}" != array-* ]]; then
+        typeset -a __varstash_autosource_ignore=()
+    fi
+
+
+    # An array with a list of patterns of variables to ignore by autosource
+    # Includes by default:
+    #      1. Variables managed by varstash
+    #      2. Varstash autostash arrays
+    #      3. This variable
+    #      4. Pattern compiled from this variable
+    __varstash_autosource_ignore+=(
+        "__varstash_(alias|associative_array|array|export|function|variable|nostash)___tmp_*"
+        "_tmp_*_(autostash|AUTOSTASH)"
+        __varstash_autosource_ignore
+        __varstash_autosource_ignore_pattern
+        RANDOM
+        SECONDS
+        options
+    )
+    local __varstash_autosource_ignore_pattern="(${(j:|:)__varstash_autosource_ignore})"
+    # Anonymous function to limit scope of locals
+    function () {
+        local nonreadonly=(${(@f)$(comm -23 <(set + | sort) <(readonly + | sort)):#${~__varstash_autosource_ignore_pattern}})
+        # Autostash all variables that are not readonly
+        # Prevent already stashed messages by defining run_from_smartcd
+        run_from_smartcd=1 autostash "${(@)nonreadonly}"
+    }
+
+
+    while [[ -n $1 ]]; do
+        # Source files
+        run_from_smartcd=1 source "$1"
+        shift
+    done
+
+    # Capture all variables in current environment
+    local nonreadonly=(${(@f)$(comm -23 <(set + | sort) <(readonly + | sort)):#${~__varstash_autosource_ignore_pattern}})
+
+    local x
+    local ret
+    get_autostash_array_name
+    # Get all variables that did not exist prior to source
+    for x in $(comm -23 <(sort <<< "${(F)nonreadonly}") <(sort <<< "${(PF)ret}")); do
+        # Add var to list of autostashed variables
+        eval "$ret=(\$$ret \$x)"
+        # Mark var for deletion
+        export "__varstash_nostash__$(_mangle_var $x)=1"
+    done
+
+    # Unstash everything that was not modified
+    for x in $nonreadonly; do
+        case ${(Pt)x} in
+            array*)                    local varstash_type="array";;
+            association*)              local varstash_type="associative_array";;
+            *export*)                  local varstash_type="export" ;;
+            (scalar*|integer*|float*)) local varstash_type="variable" ;;
+            *)                         local varstash_type="" ;;
+        esac
+
+        local stash_name=$(_mangle_var $x)
+        local varstash_name="__varstash_${varstash_type}__$stash_name"
+        if function () {
+            if [[ $varstash_type != associative_array ]]; then
+                [[ "${(P)x}" == "${(P)varstash_name}" ]]
+                return $?
+            fi
+
+            # Explictly handle associative array equality
+
+            if (( ${(P)#x} != ${(P)#varstash_name} )); then
+                return 1
+            fi
+
+            local key
+            for key in ${(Pk)x}; do
+                # If key does not exist
+                if ! [[ ${${(P)varstash_name}[$key]+1} ]]; then
+                    return 1
+                fi
+                #  If values do not match
+                if [[ ${${(P)x}[$key]} != ${${(P)varstash_name}[$key]} ]];then
+                    return 1
+                fi
+            done
+        }; then
+            unstash "$x"
+        fi
+    done
+}
+
 function unstash() {
     while [[ -n $1 ]]; do
         local unstash_which=$1

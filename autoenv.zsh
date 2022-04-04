@@ -331,7 +331,7 @@ _autoenv_source() {
   # XXX: pollutes environment with e.g. `stash`, and `autostash` will cause
   # an overwritten `stash` function to be called!
   if ! (( $+functions[autostash] )); then
-    if \grep -qE '\b(autostash|autounstash|stash|unstash)\b' $autoenv_env_file; then
+    if \grep -qE '\b(autostash|autounstash|autosource|stash|unstash)\b' $autoenv_env_file; then
       source ${${funcsourcetrace[1]%:*}:h}/lib/varstash
     fi
   fi
