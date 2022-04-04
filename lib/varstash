@@ -336,7 +336,7 @@ function unstash() {
         #   4) if none match and nostash not found, do nothing
 
         # Unstash any alias
-        if [[ -n "$(eval echo \$__varstash_alias__$unstash_name)" ]]; then
+        if [[ -n "${(Pt)${:-__varstash_alias__$unstash_name}}" ]]; then
             eval "alias $(eval echo \$__varstash_alias__$unstash_name)"
             unset __varstash_alias__$unstash_name
             local unstashed=1
@@ -344,7 +344,7 @@ function unstash() {
         fi
 
         # Unstash any function
-        if [[ -n "$(eval echo \$__varstash_function__$unstash_name)" ]]; then
+        if [[ -n "${(Pt)${:-__varstash_function__$unstash_name}}" ]]; then
             eval "function $(eval echo -e \"\$__varstash_function__$unstash_name\")"
             unset __varstash_function__$unstash_name
             local unstashed=1
@@ -352,22 +352,22 @@ function unstash() {
         fi
 
         # Unstash any variable
-        if [[ -n "$(declare -p __varstash_array__$unstash_name 2>/dev/null)" ]]; then
+        if [[ -n "${(Pt)${:-__varstash_array__$unstash_name}}" ]]; then
             eval "$unstash_which=(\"\${__varstash_array__$unstash_name""[@]}\")"
             unset __varstash_array__$unstash_name
             local unstashed=1
             local unstashed_variable=1
-        elif [[ -n "$(declare -p __varstash_associative_array__$unstash_name 2>/dev/null)" ]]; then
+        elif [[ -n "${(Pt)${:-__varstash_associative_array__$unstash_name}}" ]]; then
             eval "$unstash_which=(\"\${(kv)__varstash_associative_array__$unstash_name""[@]}\")"
             unset __varstash_associative_array__$unstash_name
             local unstashed=1
             local unstashed_variable=1
-        elif [[ -n "$(declare -p __varstash_export__$unstash_name 2>/dev/null)" ]]; then
+        elif [[ -n "${(Pt)${:-__varstash_export__$unstash_name}}" ]]; then
             eval "export $unstash_which=\"\$__varstash_export__$unstash_name\""
             unset __varstash_export__$unstash_name
             local unstashed=1
             local unstashed_variable=1
-        elif [[ -n "$(declare -p __varstash_variable__$unstash_name 2>/dev/null)" ]]; then
+        elif [[ -n "${(Pt)${:-__varstash_variable__$unstash_name}}" ]]; then
             # Unset variable first to reset export
             unset -v $unstash_which
             eval "$unstash_which=\"\$__varstash_variable__$unstash_name\""
@@ -377,7 +377,7 @@ function unstash() {
         fi
 
         # Unset any values which did not exist at time of stash
-        local nostash="$(eval echo \$__varstash_nostash__$unstash_name)"
+        local nostash="${(Pt)${:-__varstash_nostash__$unstash_name}}"
         unset __varstash_nostash__$unstash_name
         if [[ ( -n "$nostash" && -z "$unstashed" ) || ( -n "$unstashed" && -z "$unstashed_alias" ) ]]; then
             unalias $unstash_which 2>/dev/null
