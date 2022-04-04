@@ -132,19 +132,19 @@ function stash() {
         fi
 
         # Handle any variable that may exist under this name
-        local vartype="$(declare -p $stash_which 2>/dev/null)"
+        local vartype="${(Pt)stash_which}"
         if [[ -n $vartype ]]; then
-            if [[ $vartype == 'typeset -a'* || $vartype == 'typeset -g -a'* ]]; then
+            if [[ $vartype == array* ]]; then
                 # varible is an array
                 if [[ -z $already_stashed ]]; then
                     eval "__varstash_array__$stash_name=(\"\${$stash_which""[@]}\")"
                 fi
-            elif [[ $vartype == 'typeset -A'* || $vartype == 'typeset -g -A'* ]];then
+            elif [[ $vartype == association* ]]; then
                 # varible is an associative array
                 if [[ -z $already_stashed ]]; then
                     eval "typeset -g -A __varstash_associative_array__$stash_name=(\"\${(kv)$stash_which""[@]}\")"
                 fi
-            elif [[ $vartype == "export "* || $vartype == 'typeset -x'* ]]; then
+            elif [[ $vartype == *export* ]]; then
                 # variable is exported
                 if [[ -z $already_stashed ]]; then
                     eval "export __varstash_export__$stash_name=\"\$$stash_which\""
