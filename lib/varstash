@@ -204,6 +204,7 @@ function autostash() {
     local run_from_autostash=1
     local ret varname
     local already_stashed=
+    get_autostash_array_name
     while [[ -n $1 ]]; do
         if [[ $1 == "alias" && $2 == *=* ]]; then
             shift
@@ -214,7 +215,6 @@ function autostash() {
         stash "$1"
         if [[ -z $already_stashed ]]; then
             varname=${1%%'='*}
-            get_autostash_array_name
             eval "$ret=(\$$ret \$varname)"
         fi
         shift
