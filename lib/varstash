@@ -188,16 +188,19 @@ function stash() {
 }
 
 function get_autostash_array_name() {
-    local autostash_name
-    _mangle_var AUTOSTASH autostash_name
+    _mangle_var autostash ret
+}
+
+function make_autostash_array() {
+    local ret
+    get_autostash_array_name
     # Create a scalar variable linked to an array (for exporting).
-    local autostash_array_name=${(L)autostash_name}
-    if ! (( ${(P)+autostash_array_name} )); then
+    local autostash_name=${(U)ret}
+    if ! (( ${(P)+ret} )); then
         # Conditionally set it, to prevent error with Zsh 4.3:
         # can't tie already tied scalar: ...
-        typeset -xT $autostash_name $autostash_array_name
+        typeset -xUT $autostash_name $ret
     fi
-    ret=$autostash_array_name
 }
 
 function autostash() {
@@ -205,6 +208,8 @@ function autostash() {
     local ret varname
     local already_stashed=
     get_autostash_array_name
+
+    make_autostash_array
     while [[ -n $1 ]]; do
         if [[ $1 == "alias" && $2 == *=* ]]; then
             shift
@@ -240,7 +245,8 @@ function autosource () {
     #      4. Pattern compiled from this variable
     __varstash_autosource_ignore+=(
         "__varstash_(alias|associative_array|array|export|function|variable|nostash)___tmp_*"
-        "_tmp_*_(autostash|AUTOSTASH)"
+        "_tmp_*_autostash"
+        "_TMP_*_AUTOSTASH"
         __varstash_autosource_ignore
         __varstash_autosource_ignore_pattern
         RANDOM
@@ -393,6 +399,13 @@ function unstash() {
             fi
         fi
 
+        local ret
+        get_autostash_array_name
+        # Remove unstashed variable from autostash array
+        if  [[ "${(Pt)ret}" == array* ]]; then
+                eval "$ret=(\${$ret:#$unstash_which})"
+                # set -A $ret "${${(P)ret}:#$unstash_which}"
+        fi
         shift
     done
 }
