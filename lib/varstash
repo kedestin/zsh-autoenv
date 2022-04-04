@@ -81,6 +81,7 @@ function stash() {
         if [[ ( -n "$(eval echo '$__varstash_alias__'$stash_name)"    ||
                 -n "$(eval echo '$__varstash_function__'$stash_name)" ||
                 -n "$(eval echo '$__varstash_array__'$stash_name)"    ||
+                -n "$(eval echo '$__varstash_associative_array__'$stash_name)"    ||
                 -n "$(eval echo '$__varstash_export__'$stash_name)"   ||
                 -n "$(eval echo '$__varstash_variable__'$stash_name)" ||
                 -n "$(eval echo '$__varstash_nostash__'$stash_name)" )
@@ -139,7 +140,11 @@ function stash() {
                 if [[ -z $already_stashed ]]; then
                     eval "__varstash_array__$stash_name=(\"\${$stash_which""[@]}\")"
                 fi
-
+            elif [[ $vartype == 'typeset -A'* || $vartype == 'typeset -g -A'* ]];then
+                # varible is an associative array
+                if [[ -z $already_stashed ]]; then
+                    eval "typeset -g -A __varstash_associative_array__$stash_name=(\"\${(kv)$stash_which""[@]}\")"
+                fi
             elif [[ $vartype == "export "* || $vartype == 'typeset -x'* ]]; then
                 # variable is exported
                 if [[ -z $already_stashed ]]; then
@@ -252,6 +257,11 @@ function unstash() {
         if [[ -n "$(declare -p __varstash_array__$unstash_name 2>/dev/null)" ]]; then
             eval "$unstash_which=(\"\${__varstash_array__$unstash_name""[@]}\")"
             unset __varstash_array__$unstash_name
+            local unstashed=1
+            local unstashed_variable=1
+        elif [[ -n "$(declare -p __varstash_associative_array__$unstash_name 2>/dev/null)" ]]; then
+            eval "$unstash_which=(\"\${(kv)__varstash_associative_array__$unstash_name""[@]}\")"
+            unset __varstash_associative_array__$unstash_name
             local unstashed=1
             local unstashed_variable=1
         elif [[ -n "$(declare -p __varstash_export__$unstash_name 2>/dev/null)" ]]; then
