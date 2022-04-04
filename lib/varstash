@@ -135,7 +135,7 @@ function stash() {
         # Handle any variable that may exist under this name
         local vartype="$(declare -p $stash_which 2>/dev/null)"
         if [[ -n $vartype ]]; then
-            if [[ $vartype == 'typeset -a'* ]]; then
+            if [[ $vartype == 'typeset -a'* || $vartype == 'typeset -g -a'* ]]; then
                 # varible is an array
                 if [[ -z $already_stashed ]]; then
                     eval "__varstash_array__$stash_name=(\"\${$stash_which""[@]}\")"
