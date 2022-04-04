@@ -79,30 +79,28 @@ function stash() {
         stash_value=${stash_value//\`/\\\`}
         stash_value=${stash_value//\$/\\\$}
 
-        if [[ ( -n "$(eval echo '$__varstash_alias__'$stash_name)"    ||
-                -n "$(eval echo '$__varstash_function__'$stash_name)" ||
-                -n "$(eval echo '$__varstash_array__'$stash_name)"    ||
-                -n "$(eval echo '$__varstash_associative_array__'$stash_name)"    ||
-                -n "$(eval echo '$__varstash_export__'$stash_name)"   ||
-                -n "$(eval echo '$__varstash_variable__'$stash_name)" ||
-                -n "$(eval echo '$__varstash_nostash__'$stash_name)" )
-                && -z $force ]]; then
-
-            if [[ -z $already_stashed && ${already_stashed-_} == "_" ]]; then
-                local already_stashed=1
-            else
-                already_stashed=1
-            fi
-
-            if [[ $stash_which == $stash_expression ]]; then
-                if [[ -z $run_from_smartcd ]]; then
-                    echo "You have already stashed $stash_which, please specify \"-f\" if you want to overwrite another stashed value."
+        local var=
+        if [[ -z $force ]]; then
+            for var in __varstash_{alias,function,array,associative_array,export,variable,nostash}"__$stash_name"; do
+                if [[ -n ${(Pt)var} ]]; then
+                    if [[ -z $already_stashed && ${already_stashed-_} == "_" ]]; then
+                        local already_stashed=1
+                    else
+                        already_stashed=1
+                    fi
+                    break
                 fi
+            done
+        fi
 
-                # Skip remaining work if we're not doing an assignment
-                shift
-                continue
+        if [[ -n $already_stashed ]] && [[ $stash_which == $stash_expression ]]; then
+            if [[ -z $run_from_smartcd ]]; then
+                echo "You have already stashed $stash_which, please specify \"-f\" if you want to overwrite another stashed value."
             fi
+
+            # Skip remaining work if we're not doing an assignment
+            shift
+            continue
         fi
 
         # Handle any alias that may exist under this name
