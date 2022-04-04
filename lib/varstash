@@ -69,7 +69,8 @@ function stash() {
 
         local stash_expression=$1
         local stash_which=${stash_expression%%'='*}
-        local stash_name=$(_mangle_var $stash_which)
+        local stash_name=
+        _mangle_var $stash_which stash_name
 
         # Extract the value and make it double-quote safe
         local stash_value=${stash_expression#*'='}
@@ -189,7 +190,8 @@ function stash() {
 }
 
 function get_autostash_array_name() {
-    local autostash_name=$(_mangle_var AUTOSTASH)
+    local autostash_name
+    _mangle_var AUTOSTASH autostash_name
     # Create a scalar variable linked to an array (for exporting).
     local autostash_array_name=${(L)autostash_name}
     if ! (( ${(P)+autostash_array_name} )); then
@@ -277,6 +279,7 @@ function autosource () {
         export "__varstash_nostash__$(_mangle_var $x)=1"
     done
 
+    local stash_name
     # Unstash everything that was not modified
     for x in $nonreadonly; do
         case ${(Pt)x} in
@@ -287,7 +290,7 @@ function autosource () {
             *)                         local varstash_type="" ;;
         esac
 
-        local stash_name=$(_mangle_var $x)
+        _mangle_var $x stash_name
         local varstash_name="__varstash_${varstash_type}__$stash_name"
         if function () {
             if [[ $varstash_type != associative_array ]]; then
@@ -325,7 +328,8 @@ function unstash() {
             continue
         fi
 
-        local unstash_name=$(_mangle_var $unstash_which)
+        local unstash_name
+        _mangle_var $unstash_which unstash_name
 
         # This bit is a little tricky.  Here are the rules:
         #   1) unstash any alias, function, or variable which matches
@@ -413,7 +417,11 @@ function _mangle_var() {
     local mangle_var_where="${varstash_dir:-$PWD}"
     mangle_var_where=${mangle_var_where//[^A-Za-z0-9]/_}
     local mangled_name=${1//[^A-Za-z0-9]/_}
-    echo "_tmp_${mangle_var_where}_${mangled_name}"
+    if [[ -z $2 ]]; then
+        echo "_tmp_${mangle_var_where}_${mangled_name}"
+    else
+        eval "$2=_tmp_${mangle_var_where}_${mangled_name}"
+    fi
 }
 
 # vim: filetype=zsh autoindent expandtab shiftwidth=4 softtabstop=4
