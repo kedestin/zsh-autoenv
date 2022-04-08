@@ -147,7 +147,13 @@ function stash() {
             elif [[ $vartype == *export* ]]; then
                 # variable is exported
                 if [[ -z $already_stashed ]]; then
-                    eval "export __varstash_export__$stash_name=\"\$$stash_which\""
+                    # Handle variables that change their values when expanded
+                    if [[ $vartype == *(left|right_blanks|right_zeros|lower|upper)* ]]; then
+                        # ${(Q)$(typeset + a)#a=}
+                        eval "export __varstash_export__$stash_name=${$(typeset -m "$stash_which")#${stash_which}=}"
+                    else
+                        eval "export __varstash_export__$stash_name=\"\$$stash_which\""
+                    fi
                 fi
                 if [[ $stash_which != $stash_expression && -z $_stashing_alias_assign ]]; then
                     eval "export $stash_which=\"$stash_value\""
@@ -155,7 +161,12 @@ function stash() {
             else
                 # regular variable
                 if [[ -z $already_stashed ]]; then
-                    eval "__varstash_variable__$stash_name=\"\$$stash_which\""
+                    # Handle variables that change their values when expanded
+                    if [[ $vartype == *(left|right_blanks|right_zeros|lower|upper)* ]]; then
+                        eval "__varstash_variable__$stash_name=${$(typeset -m "$stash_which")#${stash_which}=}"
+                    else
+                        eval "__varstash_variable__$stash_name=\"\$$stash_which\""
+                    fi
                 fi
                 if [[ $stash_which != $stash_expression && -z $_stashing_alias_assign ]]; then
                     eval "$stash_which=\"$stash_value\""
