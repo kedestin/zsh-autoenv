@@ -77,7 +77,7 @@ function stash() {
 
         local var=
         if [[ -z $force ]]; then
-            for var in __varstash_{alias,function,array,associative_array,export,variable,readonly,nostash}"__$stash_name"; do
+            for var in __varstash_{alias,function,array,associative_array,export,variable,readonly,tied,nostash}"__$stash_name"; do
                 if [[ -n ${(Pt)var} ]]; then
                     if [[ -z $already_stashed && ${already_stashed-_} == "_" ]]; then
                         local already_stashed=1
@@ -122,6 +122,25 @@ function stash() {
                 # readonly only variables don't need to be stashed
                 if [[ -z $already_stashed ]]; then
                     typeset -g "__varstash_readonly__$stash_name="
+                fi
+            elif [[ $vartype == *tied* ]]; then
+                if [[ -z $already_stashed ]]; then
+                    if [[ $vartype == *array* ]]; then
+                        local arrayVar=$stash_which
+                    else
+                        local arrayVar=${$(declare +m $stash_which)[-2]}
+                    fi
+
+                    # Used to mark that variable was stashed
+                    typeset -g "__varstash_tied__$stash_name="
+
+                    # Actually store value in a backing field shared by both variables
+                    local backingField=__varstash_tied_backing_field__$(_mangle_var $arrayVar)
+
+                    # Only set backing field if unset
+                    if [[ -z "${(Pt)backingField}" ]]; then
+                        set -A $backingField "${(P@)arrayVar}"
+                    fi
                 fi
             elif [[ $vartype == array* ]]; then
                 # varible is an array
@@ -248,7 +267,7 @@ function autosource () {
     #          * The ignore pattern generated from this variable
     #      2. Special shell variables that don't make sense to autosource
     __varstash_autosource_ignore+=(
-        "__varstash_(alias|associative_array|array|export|function|variable|readonly|nostash)___tmp_*"
+        "__varstash_(alias|associative_array|array|export|function|variable|readonly|tied|tied_backing_field|nostash)___tmp_*"
         "_tmp_*_autostash"
         "_TMP_*_AUTOSTASH"
         __varstash_autosource_ignore
@@ -367,6 +386,22 @@ function unstash() {
         local unstashed_variable=1 # assume variable was unstashed
         if [[ -n "${(Pt)${:-__varstash_readonly__$unstash_name}}" ]]; then
             unset __varstash_readonly__$unstash_name
+        elif [[ -n "${(Pt)${:-__varstash_tied__$unstash_name}}" ]]; then
+            local otherTiedVar=${$(declare +m $unstash_which)[-2]}
+            if [[ "${(Pt)unstash_which}" == *array* ]]; then
+                local arrayVar=$unstash_which
+            else
+                local arrayVar=$otherTiedVar
+            fi
+            local backingField=__varstash_tied_backing_field__$(_mangle_var $arrayVar)
+
+            set -A $arrayVar "${(P@)backingField}"
+            unset __varstash_tied__$unstash_name
+
+            # Only unset backing field if other tied var is not stashed
+            if [[ -z "${(Pt)${:-__varstash_tied__$(_mangle_var $otherTiedVar)}}" ]]; then
+                unset $backingField
+            fi
         elif [[ -n "${(Pt)${:-__varstash_array__$unstash_name}}" ]]; then
             set -A $unstash_which "${(P@)${:-__varstash_array__$unstash_name}}"
             unset __varstash_array__$unstash_name
