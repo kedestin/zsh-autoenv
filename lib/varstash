@@ -77,7 +77,7 @@ function stash() {
 
         local var=
         if [[ -z $force ]]; then
-            for var in __varstash_{alias,function,array,associative_array,export,variable,nostash}"__$stash_name"; do
+            for var in __varstash_{alias,function,array,associative_array,export,variable,readonly,nostash}"__$stash_name"; do
                 if [[ -n ${(Pt)var} ]]; then
                     if [[ -z $already_stashed && ${already_stashed-_} == "_" ]]; then
                         local already_stashed=1
@@ -118,7 +118,12 @@ function stash() {
         # Handle any variable that may exist under this name
         local vartype="${(Pt)stash_which}"
         if [[ -n $vartype ]]; then
-            if [[ $vartype == array* ]]; then
+            if [[ $vartype == *readonly* ]]; then
+                # readonly only variables don't need to be stashed
+                if [[ -z $already_stashed ]]; then
+                    typeset -g "__varstash_readonly__$stash_name="
+                fi
+            elif [[ $vartype == array* ]]; then
                 # varible is an array
                 if [[ -z $already_stashed ]]; then
                     set -A  __varstash_array__$stash_name "${(P@)stash_which}"
@@ -236,12 +241,14 @@ function autosource () {
 
     # An array with a list of patterns of variables to ignore by autosource
     # Includes by default:
-    #      1. Variables managed by varstash
-    #      2. Varstash autostash arrays
-    #      3. This variable
-    #      4. Pattern compiled from this variable
+    #      1. Variables managed by this file
+    #          * Variables used to stash values
+    #          * Varstash autostash arrays
+    #          * This variable
+    #          * The ignore pattern generated from this variable
+    #      2. Special shell variables that don't make sense to autosource
     __varstash_autosource_ignore+=(
-        "__varstash_(alias|associative_array|array|export|function|variable|nostash)___tmp_*"
+        "__varstash_(alias|associative_array|array|export|function|variable|readonly|nostash)___tmp_*"
         "_tmp_*_autostash"
         "_TMP_*_AUTOSTASH"
         __varstash_autosource_ignore
@@ -253,7 +260,7 @@ function autosource () {
     local __varstash_autosource_ignore_pattern="(${(j:|:)__varstash_autosource_ignore})"
     # Anonymous function to limit scope of locals
     function () {
-        local nonreadonly=(${(@f)$(comm -23 <(set + | sort) <(readonly + | sort)):#${~__varstash_autosource_ignore_pattern}})
+        local nonreadonly=( ${(@f)$(set +):#${~__varstash_autosource_ignore_pattern}} )
         # Autostash all variables that are not readonly
         # Prevent already stashed messages by defining run_from_smartcd
         run_from_smartcd=1 autostash "${(@)nonreadonly}"
@@ -267,13 +274,13 @@ function autosource () {
     done
 
     # Capture all variables in current environment
-    local nonreadonly=(${(@f)$(comm -23 <(set + | sort) <(readonly + | sort)):#${~__varstash_autosource_ignore_pattern}})
+    local nonreadonly=( ${(@f)$(set +):#${~__varstash_autosource_ignore_pattern}} )
 
     local x
     local ret
     get_autostash_array_name
     # Get all variables that did not exist prior to source
-    for x in $(comm -23 <(sort <<< "${(F)nonreadonly}") <(sort <<< "${(PF)ret}")); do
+    for x in ${(@)nonreadonly:#${~:-(${(j:|:)${(P)ret}})}}; do
         # Add var to list of autostashed variables
         set -A $ret "${(P@)ret}" "$x"
         # Mark var for deletion
@@ -284,16 +291,20 @@ function autosource () {
     # Unstash everything that was not modified
     for x in $nonreadonly; do
         case ${(Pt)x} in
+            *readonly*)                local varstash_type="readonly";;
             array*)                    local varstash_type="array";;
             association*)              local varstash_type="associative_array";;
             *export*)                  local varstash_type="export" ;;
-            (scalar*|integer*|float*)) local varstash_type="variable" ;;
+            (scalar*|integer*|float*)) local varstash_type="variable";;
             *)                         local varstash_type="" ;;
         esac
 
         _mangle_var $x stash_name
         local varstash_name="__varstash_${varstash_type}__$stash_name"
         if function () {
+            if [[ $varstash_type == "readonly" ]]; then
+                return 0
+            fi
             if [[ $varstash_type != associative_array ]]; then
                 [[ "${(P)x}" == "${(P)varstash_name}" ]]
                 return $?
@@ -354,7 +365,9 @@ function unstash() {
 
         # Unstash any variable
         local unstashed_variable=1 # assume variable was unstashed
-        if [[ -n "${(Pt)${:-__varstash_array__$unstash_name}}" ]]; then
+        if [[ -n "${(Pt)${:-__varstash_readonly__$unstash_name}}" ]]; then
+            unset __varstash_readonly__$unstash_name
+        elif [[ -n "${(Pt)${:-__varstash_array__$unstash_name}}" ]]; then
             set -A $unstash_which "${(P@)${:-__varstash_array__$unstash_name}}"
             unset __varstash_array__$unstash_name
         elif [[ -n "${(Pt)${:-__varstash_associative_array__$unstash_name}}" ]]; then
