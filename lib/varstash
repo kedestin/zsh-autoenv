@@ -74,10 +74,6 @@ function stash() {
 
         # Extract the value and make it double-quote safe
         local stash_value=${stash_expression#*'='}
-        stash_value=${stash_value//\\/\\\\}
-        stash_value=${stash_value//\"/\\\"}
-        stash_value=${stash_value//\`/\\\`}
-        stash_value=${stash_value//\$/\\\$}
 
         local var=
         if [[ -z $force ]]; then
@@ -104,31 +100,19 @@ function stash() {
         fi
 
         # Handle any alias that may exist under this name
-        if [[ -z $already_stashed ]]; then
-            local alias_def="$(eval alias $stash_which 2>/dev/null)"
-            if [[ -n $alias_def ]]; then
-                alias_def=${alias_def#alias }
-                eval "__varstash_alias__$stash_name=\"$alias_def\""
-                local stashed=1
-            fi
+        if [[ ${aliases[$stash_which]+1} ]] && [[ -z $already_stashed ]]; then
+            typeset -g "__varstash_alias__$stash_name=${aliases[$stash_which]}"
+            local stashed=1
         fi
+
         if [[ $stash_which != $stash_expression && -n $_stashing_alias_assign ]]; then
-            eval "alias $stash_which=\"$stash_value\""
+            alias "$stash_which=$stash_value"
         fi
 
         # Handle any function that may exist under this name
-        if [[ -z $already_stashed ]]; then
-            local function_def="$(declare -f $stash_which)"
-            if [[ -n $function_def ]]; then
-                # make function definition quote-safe.  because we are going to evaluate the
-                # source with "echo -e", we need to double-escape the backslashes (so 1 -> 4)
-                function_def=${function_def//\\/\\\\\\\\}
-                function_def=${function_def//\"/\\\"}
-                function_def=${function_def//\`/\\\`}
-                function_def=${function_def//\$/\\\$}
-                eval "__varstash_function__$stash_name=\"$function_def\""
-                local stashed=1
-            fi
+        if [[ ${functions[$stash_which]+1} ]] && [[ -z $already_stashed ]]; then
+            typeset -g "__varstash_function__$stash_name=${functions[$stash_which]}"
+            local stashed=1
         fi
 
         # Handle any variable that may exist under this name
@@ -137,12 +121,14 @@ function stash() {
             if [[ $vartype == array* ]]; then
                 # varible is an array
                 if [[ -z $already_stashed ]]; then
-                    eval "__varstash_array__$stash_name=(\"\${$stash_which""[@]}\")"
+                    set -A  __varstash_array__$stash_name "${(P@)stash_which}"
                 fi
             elif [[ $vartype == association* ]]; then
                 # varible is an associative array
                 if [[ -z $already_stashed ]]; then
-                    eval "typeset -g -A __varstash_associative_array__$stash_name=(\"\${(kv)$stash_which""[@]}\")"
+                    typeset -g -A __varstash_associative_array__$stash_name
+                    set -A __varstash_associative_array__$stash_name "${(Pkv@)stash_which}"
+
                 fi
             elif [[ $vartype == *export* ]]; then
                 # variable is exported
@@ -150,26 +136,26 @@ function stash() {
                     # Handle variables that change their values when expanded
                     if [[ $vartype == *(left|right_blanks|right_zeros|lower|upper)* ]]; then
                         # ${(Q)$(typeset + a)#a=}
-                        eval "export __varstash_export__$stash_name=${$(typeset -m "$stash_which")#${stash_which}=}"
+                        export "__varstash_export__$stash_name=${(Q)$(typeset -m "$stash_which")#${stash_which}=}"
                     else
-                        eval "export __varstash_export__$stash_name=\"\$$stash_which\""
+                        export "__varstash_export__$stash_name=${(P)stash_which}"
                     fi
                 fi
                 if [[ $stash_which != $stash_expression && -z $_stashing_alias_assign ]]; then
-                    eval "export $stash_which=\"$stash_value\""
+                    export "$stash_which=$stash_value"
                 fi
             else
                 # regular variable
                 if [[ -z $already_stashed ]]; then
                     # Handle variables that change their values when expanded
                     if [[ $vartype == *(left|right_blanks|right_zeros|lower|upper)* ]]; then
-                        eval "__varstash_variable__$stash_name=${$(typeset -m "$stash_which")#${stash_which}=}"
+                        typeset -g "__varstash_variable__$stash_name=${(Q)$(typeset -m "$stash_which")#${stash_which}=}"
                     else
-                        eval "__varstash_variable__$stash_name=\"\$$stash_which\""
+                        typeset -g "__varstash_variable__$stash_name=${(P)stash_which}"
                     fi
                 fi
                 if [[ $stash_which != $stash_expression && -z $_stashing_alias_assign ]]; then
-                    eval "$stash_which=\"$stash_value\""
+                    typeset -g "$stash_which=$stash_value"
                 fi
 
             fi
@@ -184,12 +170,12 @@ function stash() {
             # (eval):1: command not found: __varstash_nostash___tmp__home_dolszewski_src_smartcd_RANDOM_VARIABLE=1
             # fixed in zsh commit 724fd07a67f, version 4.3.14
             if [[ -z $already_stashed ]]; then
-                eval "export __varstash_nostash__$stash_name=1"
+                export "__varstash_nostash__$stash_name=1"
             fi
 
             # In the case of a previously unset variable that we're assigning too, export it
             if [[ $stash_which != $stash_expression && -z $_stashing_alias_assign ]]; then
-                eval "export $stash_which=\"$stash_value\""
+                export "$stash_which=$stash_value"
             fi
         fi
 
@@ -231,7 +217,7 @@ function autostash() {
         stash "$1"
         if [[ -z $already_stashed ]]; then
             varname=${1%%'='*}
-            eval "$ret=(\$$ret \$varname)"
+            set -A $ret "${(P@)ret}" "$varname"
         fi
         shift
         unset -v _stashing_alias_assign
@@ -289,7 +275,7 @@ function autosource () {
     # Get all variables that did not exist prior to source
     for x in $(comm -23 <(sort <<< "${(F)nonreadonly}") <(sort <<< "${(PF)ret}")); do
         # Add var to list of autostashed variables
-        eval "$ret=(\$$ret \$x)"
+        set -A $ret "${(P@)ret}" "$x"
         # Mark var for deletion
         export "__varstash_nostash__$(_mangle_var $x)=1"
     done
@@ -354,7 +340,7 @@ function unstash() {
 
         # Unstash any alias
         if [[ -n "${(Pt)${:-__varstash_alias__$unstash_name}}" ]]; then
-            eval "alias $(eval echo \$__varstash_alias__$unstash_name)"
+            alias "$unstash_which=${(P)${:-__varstash_alias__$unstash_name}}"
             unset __varstash_alias__$unstash_name
             local unstashed=1
             local unstashed_alias=1
@@ -362,7 +348,7 @@ function unstash() {
 
         # Unstash any function
         if [[ -n "${(Pt)${:-__varstash_function__$unstash_name}}" ]]; then
-            eval "function $(eval echo -e \"\$__varstash_function__$unstash_name\")"
+            functions[$unstash_name]=${(P)${:-__varstash_function__$unstash_name}}
             unset __varstash_function__$unstash_name
             local unstashed=1
             local unstashed_function=1
@@ -370,24 +356,25 @@ function unstash() {
 
         # Unstash any variable
         if [[ -n "${(Pt)${:-__varstash_array__$unstash_name}}" ]]; then
-            eval "$unstash_which=(\"\${__varstash_array__$unstash_name""[@]}\")"
+            set -A $unstash_which "${(P@)${:-__varstash_array__$unstash_name}}"
             unset __varstash_array__$unstash_name
             local unstashed=1
             local unstashed_variable=1
         elif [[ -n "${(Pt)${:-__varstash_associative_array__$unstash_name}}" ]]; then
-            eval "$unstash_which=(\"\${(kv)__varstash_associative_array__$unstash_name""[@]}\")"
+            typeset -g -A $unstash_which
+            set -A $unstash_which  "${(Pkv@)${:-__varstash_associative_array__$unstash_name}}"
             unset __varstash_associative_array__$unstash_name
             local unstashed=1
             local unstashed_variable=1
         elif [[ -n "${(Pt)${:-__varstash_export__$unstash_name}}" ]]; then
-            eval "export $unstash_which=\"\$__varstash_export__$unstash_name\""
+            export "$unstash_which=${(P)${:-__varstash_export__$unstash_name}}"
             unset __varstash_export__$unstash_name
             local unstashed=1
             local unstashed_variable=1
         elif [[ -n "${(Pt)${:-__varstash_variable__$unstash_name}}" ]]; then
-            # Unset variable first to reset export
-            unset -v $unstash_which
-            eval "$unstash_which=\"\$__varstash_variable__$unstash_name\""
+            # Remove export attribute
+            typeset +x $unstash_which
+            typeset -g "$unstash_which=${(P)${:-__varstash_variable__$unstash_name}}"
             unset __varstash_variable__$unstash_name
             local unstashed=1
             local unstashed_variable=1
@@ -414,8 +401,7 @@ function unstash() {
         get_autostash_array_name
         # Remove unstashed variable from autostash array
         if  [[ "${(Pt)ret}" == array* ]]; then
-                eval "$ret=(\${$ret:#$unstash_which})"
-                # set -A $ret "${${(P)ret}:#$unstash_which}"
+                set -A $ret "${(P@)ret:#$unstash_which}"
         fi
         shift
     done
@@ -442,7 +428,7 @@ function _mangle_var() {
     if [[ -z $2 ]]; then
         echo "_tmp_${mangle_var_where}_${mangled_name}"
     else
-        eval "$2=_tmp_${mangle_var_where}_${mangled_name}"
+        typeset -g "$2=_tmp_${mangle_var_where}_${mangled_name}"
     fi
 }
 
