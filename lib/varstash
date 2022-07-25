@@ -275,6 +275,10 @@ function autosource () {
         RANDOM
         SECONDS
         options
+        functions
+        commands
+        argv
+        0
     )
     local __varstash_autosource_ignore_pattern="(${(j:|:)__varstash_autosource_ignore})"
     # Anonymous function to limit scope of locals
